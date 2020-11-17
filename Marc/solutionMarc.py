@@ -1,6 +1,8 @@
 import numpy as np
+import math 
 from scipy.optimize import fmin_l_bfgs_b
 from sklearn.gaussian_process import kernels
+from scipy.stats import norm
 
 domain = np.array([[0, 5]])
 kernel = Matern(length_scale=0.5)
@@ -17,8 +19,13 @@ class BO_algo():
         self.mean_v = 1.5
         self.nu_f = 0.15
         self.K = 1.2
+        self.x = np.empty()
+        self.v = np.empty()
+        self.f = np.empty()
         
         
+        #self.model_v = None
+        #self.model_f = None ? ? sait aps
         self.likelihood_f = gpytorch.likelihoods.GaussianLikelihood()
         self.likelihood_v = gpytorch.likelihoods.GaussianLikelihood()
         
@@ -26,9 +33,9 @@ class BO_algo():
 
         self.kernel_v = gpytorch.kernels.ScaleKernel(base_kernel=gpytorch.kernels.MaternKernel(nu=2.5, lengthscale=torch.Tensor([0.5])), outputscale=np.sqrt(2))
        
-        self.gp_f = ExactGPModel(kernel = self.kernel_f, train_x = x, train_y = f, likelihood = self.likelihood_f)
+        self.gp_f = ExactGPModel(kernel = self.kernel_f, train_x = self.x, train_y = self.f, likelihood = self.likelihood_f)
     
-        self.gp_v = ExactGPModel(mean=self.mean_v, kernel=self.kernel_v, train_x=x, train_y=v, likelihood=self.likelihood_v)
+        self.gp_v = ExactGPModel(mean=self.mean_v, kernel=self.kernel_v, train_x=self.x, train_y=self.v, likelihood=self.likelihood_v)
         
         
         #self.f = matern...
@@ -51,7 +58,7 @@ class BO_algo():
 
         # TODO: enter your code here
         # In implementing this function, you may use optimize_acquisition_function() defined below.
-        raise NotImplementedError
+        return self.optimize_acquisition_function(self)
 
 
     def optimize_acquisition_function(self):
@@ -98,12 +105,12 @@ class BO_algo():
         """
 
         # TODO: enter your code here
-        return acquisition_function_PI(self, x)
-        #return acquisition_function_EI(self, x)
+        #return acquisition_function_PI(self, x)
+        return acquisition_function_EI(self, x)
         #return acquisition_function_LCB(self, x)
         
         #raise NotImplementedError
-    def acquisition_function_PI(self, x):
+    def acquisition_function_EI(self, x):
         """
         Probability of Improvement acquisition function.
 
@@ -117,8 +124,13 @@ class BO_algo():
         af_value: float
             Value of the Probability of Improvement at x
         """
+        fx_estimate = self.gp_f(gp_f, x[len(x)-1])
         
+        z = (np.mean(x) - fx_estimate ) / math.sqrt(np.var(x))
         
+        ei = (np.mean(x) - fx_estimate) * norm.cdf(fx_estimate)  + math.sqrt(np.var(x)) * norm.pdf(fx_estimate)
+        
+        return ei
         
 
     def add_data_point(self, x, f, v):
@@ -134,8 +146,14 @@ class BO_algo():
         v: np.ndarray
             Model training speed
         """
-
-        # TODO: enter your code here
+        
+         # TODO: enter your code here
+        self.x.append(x)
+        self.f.append(f)
+        self.v.append(v)
+        self.gp_f = self.gp_f.get_fantasy_model(x, f)
+        self.gp_v = self.gp_v.get_fantasy_model(x, v)
+        
         
    
 
@@ -150,7 +168,14 @@ class BO_algo():
         """
 
         # TODO: enter your code here
-        raise NotImplementedError
+        sorted_f_indices = np.argsort(f)
+        x_best_index = len(f)-
+        
+        for index in range (len(sorted_f_indices.f)):
+            if v[sorted_f_indices[index]] > 1.2:
+                x_best_index = np.argmax(self.f)
+       
+        return x[x_best_index]
 
 
 """ Toy problem to check code works as expected """
