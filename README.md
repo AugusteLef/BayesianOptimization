@@ -19,7 +19,13 @@ Task 3 in the PAI course at ETHZ. We will build a model automatically optimising
 3. Dont know what the function "next_recommendation" does.
 
 ## Next Steps:
-1. Find a way to fit the speed in the model
+1. Find a way to fit the speed in the model OK I THINK
 2. Understand the workflow of the EI --> not compiling now
-3. Find more appropriate tools --> online learning, torch, GPY?
+3. Find more appropriate tools --> online learning, torch, GPY? USED TORCH.TENSORs IN THE SECOND TRY
 4. 
+
+## LAST COMMIT:
+1. numpy --> tensor
+2. get_solutions() implemented intuitively --> check
+3. add_data_point(...) missing the update on gaussian process (gp_f and gp_v) with the new data point --> need to check how to do that
+4. acq_fct(...) implemented using the [gitlab from the PAI course](https://gitlab.inf.ethz.ch/scuri/pai_notebooks/-/blob/master/demos/Bayesian%20Optimization%20and%20Active%20Learning.ipynb) and taking in charge the case where the data has not yet been initiated. 
