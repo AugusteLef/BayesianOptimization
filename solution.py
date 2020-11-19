@@ -1,8 +1,11 @@
 import numpy as np
+import math 
 from scipy.optimize import fmin_l_bfgs_b
+from sklearn.gaussian_process import kernels
+from scipy.stats import norm
 
 domain = np.array([[0, 5]])
-
+kernel = Matern(length_scale=0.5)
 
 """ Solution """
 
@@ -12,7 +15,48 @@ class BO_algo():
         """Initializes the algorithm with a parameter configuration. """
 
         # TODO: enter your code here
-        pass
+        #noise sttdev
+        self.nu_v          = 0.0001
+        self.nu_f          = 0.15
+        
+        #f's kernel
+        self.kernel_variance_f    = 0.5
+        self.kernel_lenghtscale_f = 0.5
+        self.kernel_smoothness_f  = 2.5 
+        
+        #v's kernel
+        self.kernel_mean_v        = 1.5
+        self.kernel_variance_v    = math.sqrt(2)
+        self.kernel_lenghtscale_v = 0.5
+        self.kernel_smoothness_v  = 2.5 
+        
+        self.K = 1.2 #minimum speed K
+        #init x, v, f tensors as None as no data yet (--> add_data_point handles)
+        self.x = None
+        self.v = None
+        self.f = None
+        
+        
+        #self.model_v = None
+        #self.model_f = None ? ? sait aps
+        self.likelihood_f = gpytorch.likelihoods.GaussianLikelihood()
+        self.likelihood_v = gpytorch.likelihoods.GaussianLikelihood()
+        
+        self.kernel_f = gpytorch.kernels.ScaleKernel(base_kernel=gpytorch.kernels.MaternKernel(nu=kernel_smoothness_f, lengthscale=torch.Tensor([kernel_lenghtscale_f])), outputscale=kernel_variance_f)
+
+        self.kernel_v = gpytorch.kernels.ScaleKernel(base_kernel=gpytorch.kernels.MaternKernel(nu=kernel_smoothness_v, lengthscale=torch.Tensor([kernel_lenghtscale_v])), outputscale=np.sqrt(kernel_variance_v))
+       
+        self.gp_f = ExactGPModel(kernel = self.kernel_f, train_x = self.x, train_y = self.f, likelihood = self.likelihood_f)
+    
+        self.gp_v = ExactGPModel(mean=self.mean_v, kernel=self.kernel_v, train_x=self.x, train_y=self.v, likelihood=self.likelihood_v)
+        
+        
+        #self.f = matern...
+        #self.v = matern + mean...
+        #self.gp = gaussian process... :p
+        #ok c bon avec le ScaleKernel
+        
+        
 
 
     def next_recommendation(self):
@@ -27,7 +71,7 @@ class BO_algo():
 
         # TODO: enter your code here
         # In implementing this function, you may use optimize_acquisition_function() defined below.
-        raise NotImplementedError
+        return np.atleast_2d(self.optimize_acquisition_function(self))
 
 
     def optimize_acquisition_function(self):
@@ -74,8 +118,76 @@ class BO_algo():
         """
 
         # TODO: enter your code here
-        raise NotImplementedError
+        #return acquisition_function_PI(self, x)
+        return acquisition_function_EI(self, x)
+        #return acquisition_function_LCB(self, x)
+        
+    def acquisition_function_EI(self, x):
+        """
+        Probability of Improvement acquisition function.
 
+        Parameters
+        ----------
+        x: np.ndarray
+            x in domain of f
+
+        Returns
+        ------
+        af_value: float
+            Value of the Probability of Improvement at x
+        """
+        #--------- test 1 ----------
+        #fx_estimate = self.gp_f(gp_f, x[len(x)-1])
+        
+        #z = (np.mean(x) - fx_estimate ) / math.sqrt(np.var(x))
+        
+        #ei = (np.mean(x) - fx_estimate) * norm.cdf(fx_estimate)  + math.sqrt(np.var(x)) * norm.pdf(fx_estimate)
+        #return ei
+        #--------- test 2 ----------- (USING https://gitlab.inf.ethz.ch/scuri/pai_notebooks/-/blob/master/demos/Bayesian%20Optimization%20and%20Active%20Learning.ipynb
+        
+        self.xmax, self.ymax = self.get_best_value()
+        
+        if self.gp_f.train_inputs == None:
+            mu_f    = 2.5
+            sigma_f = math.sqrt(0.5)
+            mu_v    = 1.5
+            sigma_v = math.sqrt(math.sqrt(2))
+        else:
+            x      = torch.Tensor(x)
+            
+            gp_f_x  = self.gp_f(x)
+            mu_f    = gp_f_x.mean
+            sigma_f = gp_f_x.stddev
+            
+            gp_v_x  = self.gp_v(x)
+            mu_v  = gp_v_x.mean
+            sigma_v = gp_v_x.stddev
+        
+        
+        normal_distrib = Normal(torch.tensor([0.]), torch.tensor([1.]))
+
+            
+        #out = self.gp_f(self.x)
+        Z = (out.mean - ymax - self.xi) / sigma_f
+        #idx = out.stddev == 0
+        ei_f = (mu_f - self.ymax - self.xi) * normal_distrib.cdf(Z) + sigma_f * torch.exp(normal_distrib.log_prob(Z))
+        #self._acquisition_function[idx] = 0 
+        
+        weight = Normal(mu_v, sigma_v).cdf(self.K)
+        
+        return weight * ei_f  
+        #------------------------------
+      
+        
+    #----for the test 2 in acqFunc----
+    def get_best_value(self):
+        idx = self.gp.train_targets.argmax()
+        if len(self.gp.train_targets) == 1:
+            xmax, ymax = self.gp.train_inputs[idx], self.gp.train_targets[idx]
+        else:
+            xmax, ymax = self.gp.train_inputs[0][idx], self.gp.train_targets[idx]
+        return xmax, ymax 
+    #---------------------------------
 
     def add_data_point(self, x, f, v):
         """
@@ -90,9 +202,28 @@ class BO_algo():
         v: np.ndarray
             Model training speed
         """
-
-        # TODO: enter your code here
-        raise NotImplementedError
+        
+         # TODO: enter your code here
+          
+        #-------- test 1 -------------
+        #self.x.append(x)
+        #self.f.append(f)
+        #self.v = torch.catappend(v)
+        #self.gp_f = self.gp_f.get_fantasy_model(x, f)
+        #self.gp_v = self.gp_v.get_fantasy_model(x, v)
+        
+        #-------- test 2 ---------------
+        
+        if self.x == None:
+            self.x = torch.Tensor(x)
+            self.f = torch.Tensor(f)
+            self.v = torch.Tensor(v)
+        else: 
+            self.x = torch.cat(self.x, x)
+            self.f = torch.cat(self.f, f)
+            self.v = torch.cat(self.v, v)
+         
+        
 
     def get_solution(self):
         """
@@ -105,7 +236,14 @@ class BO_algo():
         """
 
         # TODO: enter your code here
-        raise NotImplementedError
+        sorted_f_indices = np.argsort(f)
+        x_best_index = len(f)-
+        
+        for index in range (len(sorted_f_indices.f)):
+            if v[sorted_f_indices[index]] > 1.2:
+                x_best_index = np.argmax(self.f)
+       
+        return x[x_best_index]
 
 
 """ Toy problem to check code works as expected """
