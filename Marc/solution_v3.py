@@ -5,8 +5,7 @@ from scipy.stats import norm
 from sklearn.gaussian_process import kernels, GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern, ConstantKernel, WhiteKernel, Sum, Product
 from scipy.stats import norm
-
-
+import gpytorch
 import torch
 
 
@@ -16,6 +15,16 @@ domain = np.array([[0, 5]])
 
 """ Solution """
 
+
+class ExactGPModel(gpytorch.models.ExactGP):
+    def __init__(self, kernel, train_x, train_y, likelihood, mean=gpytorch.means.ConstantMean()):
+        super(ExactGPModel, self).__init__(train_x, train_y, likelihood) 
+        self.mean_module = mean
+        self.covar_module = gpytorch.kernels.ScaleKernel(kernel)
+    def forward(self, x):
+        mean_x = self.mean_module(x)
+        covar_x = self.covar_module(x)
+        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
 
 
@@ -43,18 +52,13 @@ class BO_algo():
         
 #         self.K = 1.2 #minimum speed K
 #         #init x, v, f tensors as None as no data yet (--> add_data_point handles)
-        self.x = np.array([[(np.random.rand(1) * 5)[0]]]) 
-        self.v = np.array([[(np.random.rand(1))[0]]]) 
+        self.x = np.random.rand(1) * 5
+        self.v = np.random.rand(1) 
         
 #         #objective function's or surrogate function's values
-        self.f = np.array([[(np.random.rand(1) +1.5)[0]]]) 
+        self.f = np.random.rand(1) +1.5
     
         self.xi = 0.01
-        #print(str(self.x)+"this is x init")
-        #print(str(self.f)+"this is f init")
-        #print(str(self.v)+"this is v init")
-
-              
         
         
 #         #self.model_v = None
@@ -136,13 +140,6 @@ class BO_algo():
 
         # TODO: enter your code here
         # In implementing this function, you may use optimize_acquisition_function() defined below.
-        print(str(self.x)+"eh bah ca c'est x mon gars")
-        print(str(self.f)+"eh bah ca c'est f")
-        print(str(self.x)+"eh ca c'est v ")
-
-
-
-
         return np.atleast_2d(self.optimize_acquisition_function())
 
         #return  self.optimize_acquisition_function()
@@ -227,18 +224,18 @@ class BO_algo():
          #self._acquisition_function[idx] = 0 
         
         weight = norm(mean_v, sigma_v).cdf(self.kappa)
+        
         return weight * ei_f  
         #------------------------------
     def get_best_value(self):
         #print(self.x)
         #print(self.f)
         idx = np.argmax(self.f)
-        
         if len(self.f) == 1:
             xmax, ymax = self.x[idx], self.f[idx]
         else:
             #xmax, ymax = self.x[0][idx], self.f[idx]
-            xmax, ymax = self.x[0][idx], self.f[idx]
+            xmax, ymax = self.x[idx], self.f[idx]
         return xmax, ymax 
       
 
@@ -281,24 +278,16 @@ class BO_algo():
 #             self.f = np.append(self.f, f)
 #             self.v = np.append(self.v, v)
 #         else:
-        
-        #print(type(x))
-        #print(type(f))
-        #print(type(v))
-#         self.x = np.append(self.x, x)
-        
-#         self.f = np.append(self.f, f)
-#         self.v = np.append(self.v, v)
-        self.x = np.concatenate((self.x, x))
-        self.f = np.concatenate((self.f, np.array([[f]])))
-        self.v = np.concatenate((self.v, np.array([[v]])))
+        self.x = np.append(self.x, x)
+        self.f = np.append(self.f, f)
+        self.v = np.append(self.v, v)
         #print(self.x)
         #print(self.f)
         #print(self.v)
         
         self.gp_f = self.gp_f.fit(self.x.reshape(-1,1), self.f.reshape(-1,1))
         self.gp_v = self.gp_v.fit(self.x.reshape(-1,1), self.v.reshape(-1,1))
-        #print("leaving add_data_point")
+        print("leaving add_data_point")
 
     def get_solution(self):
         """
@@ -312,12 +301,12 @@ class BO_algo():
 
         # TODO: enter your code here
         sorted_f_indices = np.argsort(self.f)
-        x_best_index = len(self.f)-1
+        x_best_index = len(self.f)
         
         for index in range (len(sorted_f_indices)):
             if self.v[sorted_f_indices[index]] > 1.2:
                 x_best_index = np.argmax(self.f)
-        
+       
         return self.x[x_best_index]
 
 
