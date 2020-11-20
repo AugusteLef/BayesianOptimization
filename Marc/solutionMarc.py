@@ -63,17 +63,22 @@ class BO_algo():
         self.likelihood_f = gpytorch.likelihoods.GaussianLikelihood()
         self.likelihood_v = gpytorch.likelihoods.GaussianLikelihood()
         #init the kernels of f and v
-        self.kernel_f = Matern(nu=self.kernel_smoothness_f, length_scale=torch.Tensor([self.kernel_lenghtscale_f]))* kernels.ConstantKernel(self.kernel_variance_f)
-
-        self.kernel_v = Matern(nu=self.kernel_smoothness_v, length_scale=self.kernel_lenghtscale_v) * kernels.ConstantKernel(self.kernel_variance_v)
+        
         
         #init the gaussian process regressors of f and v
         #------test1-------
-        #self.gp_f = ExactGPModel(kernel = self.kernel_f, train_x = self.x, train_y = self.f, likelihood = self.likelihood_f)
-        #self.gp_v = ExactGPModel(mean=self.mean_v, kernel=self.kernel_v, train_x=self.x, train_y=self.v, likelihood=self.likelihood_v)
+        self.kernel_f = gpytorch.kernels.ScaleKernel(base_kernel = gpytorch.kernels.MaternKernel(nu=self.kernel_smoothness_f, length_scale=torch.Tensor([self.kernel_lenghtscale_f])), output_scale = self.kernel_variance_f)
+
+        self.kernel_v = gpytorch.kernels.ScaleKernel(base_kernel = gpytorch.kernels.MaternKernel(nu=self.kernel_smoothness_v, length_scale=self.kernel_lenghtscale_v) * kernels.ConstantKernel(self.kernel_variance_v))
+                                                      
+        self.gp_f = ExactGPModel(kernel = self.kernel_f, train_x = self.x, train_y = self.f, likelihood = self.likelihood_f)
+        self.gp_v = ExactGPModel(mean=self.mean_v, kernel=self.kernel_v, train_x=self.x, train_y=self.v, likelihood=self.likelihood_v)
         #------test2-------
-        self.gp_f = GaussianProcessRegressor(kernel = self.kernel_f, alpha = self.noise_nu_f * self.noise_nu_f)
-        self.gp_v = GaussianProcessRegressor(kernel = self.kernel_v + kernels.ConstantKernel(self.mean_v), alpha = self.noise_nu_v * self.noise_nu_v)
+        #self.kernel_f = Matern(nu=self.kernel_smoothness_f, length_scale=self.kernel_lenghtscale_f)* kernels.ConstantKernel(self.kernel_variance_f)
+
+        #self.kernel_v = Matern(nu=self.kernel_smoothness_v, length_scale=self.kernel_lenghtscale_v) * kernels.ConstantKernel(self.kernel_variance_v)
+        #self.gp_f = GaussianProcessRegressor(kernel = self.kernel_f, alpha = self.noise_nu_f * self.noise_nu_f)
+        #self.gp_v = GaussianProcessRegressor(kernel = self.kernel_v + kernels.ConstantKernel(self.mean_v), alpha = self.noise_nu_v * self.noise_nu_v)
         
         ###self.x0 = domain[:, 0] + (domain[:, 1] - domain[:, 0]) * \
         ###         np.random.rand(domain.shape[0])
@@ -115,6 +120,7 @@ class BO_algo():
         """
 
         def objective(x):
+            print(str(x)+"objectiveee")
             return -self.acquisition_function(x)
 
         f_values = []
@@ -153,36 +159,38 @@ class BO_algo():
             Value of the acquisition function at x
         """
 
-        
+        print(str(x)+"x in acq func")
+        print(str(self.x)+"self.x in acq func")
         if self.x == None:
+            print("CAREEE!! self.x=None")
             return 0
         
         mu_f, sigma_f = self.gp_f.predict(x.reshape(-1,1), return_std=True)
         mu_v, sigma_v = self.gp_v.predict(x.reshape(-1,1), return_std=True)
         
-        x      = torch.Tensor(x)
+#         x      = torch.Tensor(x)
             
-        gp_f_x  = self.gp_f(x)
-        mu_f    = gp_f_x.mean
-        sigma_f = gp_f_x.stddev
+#         gp_f_x  = self.gp_f(x)
+#         mu_f    = gp_f_x.mean
+#         sigma_f = gp_f_x.stddev
             
-        gp_v_x  = self.gp_v(x)
-        mu_v  = gp_v_x.mean
-        sigma_v = gp_v_x.stddev
+#         gp_v_x  = self.gp_v(x)
+#         mu_v  = gp_v_x.mean
+#         sigma_v = gp_v_x.stddev
         
         
-        normal_distrib = Normal(torch.tensor([0.]), torch.tensor([1.]))
+#         normal_distrib = Normal(torch.tensor([0.]), torch.tensor([1.]))
 
             
-        #out = self.gp_f(self.x)
-        Z = (out.mean - ymax - self.xi) / sigma_f
-        #idx = out.stddev == 0
-        ei_f = (mu_f - self.ymax - self.xi) * normal_distrib.cdf(Z) + sigma_f * torch.exp(normal_distrib.log_prob(Z))
-        #self._acquisition_function[idx] = 0 
+#         #out = self.gp_f(self.x)
+#         Z = (out.mean - ymax - self.xi) / sigma_f
+#         #idx = out.stddev == 0
+#         ei_f = (mu_f - self.ymax - self.xi) * normal_distrib.cdf(Z) + sigma_f * torch.exp(normal_distrib.log_prob(Z))
+#         #self._acquisition_function[idx] = 0 
         
-        weight = Normal(mu_v, sigma_v).cdf(self.K)
+#         weight = Normal(mu_v, sigma_v).cdf(self.K)
         
-        return weight * ei_f  
+#         return weight * ei_f  
         #------------------------------
     def get_best_value(self):
         idx = self.gp_f.train_targets.argmax()
@@ -218,17 +226,28 @@ class BO_algo():
         
         #-------- test 2 ---------------
         
+        #if self.x == None:
+        #    self.x = torch.Tensor(np.ndarray(x))
+        #    self.f = torch.Tensor(np.ndarray(f))
+        #    self.v = torch.Tensor(np.ndarray(v))
+        #else: 
+        #    self.x = torch.cat(self.x, x)
+        #    self.f = torch.cat(self.f, f)
+        #    self.v = torch.cat(self.v, v)
         if self.x == None:
-            self.x = torch.Tensor(np.array(x))
-            self.f = torch.Tensor(f)
-            self.v = torch.Tensor(v)
-        else: 
-            self.x = torch.cat(self.x, x)
-            self.f = torch.cat(self.f, f)
-            self.v = torch.cat(self.v, v)
-         
-        self.gp_f = gp_f.fit(self.x, self.f)
-        self.gp_v = gp_v.fit(self.x, self.v)
+            self.x = x
+            self.f = [[f]]
+            self.v = [[v]]
+        else:
+            self.x = np.append(self.x,buffer = x)
+            self.f = np.append(self.f, f)
+            self.v = np.append(self.v, v)
+        print(self.x)
+        print(self.f)
+        print(self.v)
+
+        self.gp_f = self.gp_f.fit(self.x, self.f)
+        self.gp_v = self.gp_v.fit(self.x, self.v)
 
     def get_solution(self):
         """
@@ -276,6 +295,7 @@ def main():
 
     # Loop until budget is exhausted
     for j in range(20):
+        print(j)
         # Get next recommendation
         x = agent.next_recommendation()
 
