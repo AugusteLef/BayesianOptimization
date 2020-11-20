@@ -5,8 +5,4 @@ cryptography==3.0
 GPy==1.9.9
 matplotlib==3.3.1
 sklearn
-<<<<<<< HEAD
-=======
-torch
->>>>>>> 7c93b6d02ddc1e4c56cc774303ab33e7194fdbd3
-gpytorch
+
