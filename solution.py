@@ -1,14 +1,11 @@
 import numpy as np
 import math 
+import torch
 from scipy.optimize import fmin_l_bfgs_b
 from scipy.stats import norm
 from sklearn.gaussian_process import kernels, GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern, ConstantKernel, WhiteKernel, Sum, Product
 from scipy.stats import norm
-
-
-import torch
-
 
 
 domain = np.array([[0, 5]])
