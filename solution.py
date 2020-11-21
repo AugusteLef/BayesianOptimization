@@ -1,11 +1,14 @@
 import numpy as np
 import math 
-import torch
 from scipy.optimize import fmin_l_bfgs_b
 from scipy.stats import norm
 from sklearn.gaussian_process import kernels, GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern, ConstantKernel, WhiteKernel, Sum, Product
 from scipy.stats import norm
+
+
+import torch
+
 
 
 domain = np.array([[0, 5]])
@@ -21,31 +24,16 @@ class BO_algo():
     def __init__(self):
         """Initializes the algorithm with a parameter configuration. """
 
-        # TODO: enter your code here
-#         #noise perturbation sttdev
-#         self.noise_nu_v          = 0.0001
-#         self.noise_nu_f          = 0.15
-        
-#         #f's kernel
-#         self.kernel_variance_f    = 0.5
-#         self.kernel_lenghtscale_f = 0.5
-#         self.kernel_smoothness_f  = 2.5 
-        
-#         #v's constant mean
-#         self.meanean_v        = 1.5
-#         #v's kernel
-#         self.kernel_variance_v    = math.sqrt(2)
-#         self.kernel_lenghtscale_v = 0.5
-#         self.kernel_smoothness_v  = 2.5 
-        
-#         self.K = 1.2 #minimum speed K
-#         #init x, v, f tensors as None as no data yet (--> add_data_point handles)
         self.x = np.array([[(np.random.rand(1) * 5)[0]]]) 
         self.v = np.array([[(np.random.rand(1))[0]]]) 
         
 #         #objective function's or surrogate function's values
-        self.f = np.array([[(np.random.rand(1) +1.5)[0]]]) 
-    
+        self.f = np.array([[-3]]) 
+        #print("first x is: " + str(self.x))
+        #print("first f is: " + str(self.f))
+
+
+        
         self.xi = 0.01
         #print(str(self.x)+"this is x init")
         #print(str(self.f)+"this is f init")
@@ -111,10 +99,10 @@ class BO_algo():
         self.v_mean = 1.5
         self.v_nu = 2.5
 
-        kv_1 = Matern(length_scale=self.v_lenscale, length_scale_bounds=[1e-5,1e5], nu=self.v_nu)
-        kv_2 = ConstantKernel(constant_value=self.v_var)
+        kv_1 = Matern(length_scale=self.v_lenscale, length_scale_bounds="fixed", nu=self.v_nu)
+        kv_2 = ConstantKernel(constant_value=self.v_var, constant_value_bounds="fixed")
         kv_3 = WhiteKernel(noise_level=self.v_noise)
-        kv_4 = ConstantKernel(constant_value=self.v_mean)
+        kv_4 = ConstantKernel(constant_value=self.v_mean, constant_value_bounds="fixed")
 
         self.v_kernel = Sum(Sum(kv_4, Product(kv_1, kv_2)), kv_3)
         # Default GaussianProcessRegressor (check argument possibilities)
@@ -133,9 +121,9 @@ class BO_algo():
 
         # TODO: enter your code here
         # In implementing this function, you may use optimize_acquisition_function() defined below.
-        print(str(self.x)+"eh bah ca c'est x mon gars")
-        print(str(self.f)+"eh bah ca c'est f")
-        print(str(self.x)+"eh ca c'est v ")
+        #print(str(self.x)+"eh bah ca c'est x mon gars")
+        #print(str(self.f)+"eh bah ca c'est f")
+        #print(str(self.x)+"eh ca c'est v la veriteeeeeee!")
 
 
 
@@ -172,7 +160,7 @@ class BO_algo():
                                    approx_grad=True)
             #make sure solution €[0,5] else put 0 if < 5 if >
             x_values.append(np.clip(result[0], *domain[0]))
-            #append (-1)*f(x_min) to then compute the argmax.
+            #append (-1)*f(x_min) to then compute the argmax!!!!!!!!!!
             f_values.append(-result[1])
 
         ind = np.argmax(f_values)
@@ -202,7 +190,7 @@ class BO_algo():
         #mu_f, sigma_f = self.gp_f.predict(x.reshape(-1,1), return_std=True)
         #mu_v, sigma_v = self.gp_v.predict(x.reshape(-1,1), return_std=True)
         
-        x_max, ymax = self.get_best_value()
+        self.x_max, ymax = self.get_best_value()
         #print(ymax)
         gp_f_x  = self.gp_f.predict(x.reshape(-1,1), return_std=True)
         #print(gp_f_x)
@@ -223,20 +211,24 @@ class BO_algo():
         ei_f = (mean_f - ymax - self.xi) * normal_distrib.cdf(Z) + sigma_f * normal_distrib.pdf(Z)
          #self._acquisition_function[idx] = 0 
         
-        weight = norm(mean_v, sigma_v).cdf(self.kappa)
-        return weight * ei_f  
+        weight = 1-norm(mean_v, sigma_v).cdf(self.kappa)
+        return (weight * ei_f).item()
         #------------------------------
     def get_best_value(self):
         #print(self.x)
         #print(self.f)
-        idx = np.argmax(self.f)
+#         idx = np.argmax(self.f)
         
-        if len(self.f) == 1:
-            xmax, ymax = self.x[idx], self.f[idx]
-        else:
-            #xmax, ymax = self.x[0][idx], self.f[idx]
-            xmax, ymax = self.x[0][idx], self.f[idx]
-        return xmax, ymax 
+#         if len(self.f) == 1:
+#             xmax, ymax = self.x[idx], self.f[idx]
+#         else:
+#             #xmax, ymax = self.x[0][idx], self.f[idx]
+#             xmax, ymax = self.x[0][idx], self.f[idx]
+#         return xmax, ymax 
+        idx = self.f.reshape(-1,1).argmax()
+        #print(self.f)
+        #print("voici l'indice qui nous semiinteresse" + str(idx))
+        return self.x[idx], -self.f[idx]
       
 
     def add_data_point(self, x, f, v):
@@ -286,16 +278,23 @@ class BO_algo():
         
 #         self.f = np.append(self.f, f)
 #         self.v = np.append(self.v, v)
+
         self.x = np.concatenate((self.x, x))
-        self.f = np.concatenate((self.f, np.array([[f]])))
-        self.v = np.concatenate((self.v, np.array([[v]])))
-        #print(self.x)
+        self.f = np.concatenate((self.f, np.atleast_2d(f)))
+        self.v = np.concatenate((self.v, np.atleast_2d(v)))
+        #print("new value for x's array!" + str(x))
+        #print("new value for f's array!" + str(f))        
+        #print("aaaand new value for v's array!" + str(v))
+
+
+
         #print(self.f)
         #print(self.v)
         
         self.gp_f = self.gp_f.fit(self.x.reshape(-1,1), self.f.reshape(-1,1))
         self.gp_v = self.gp_v.fit(self.x.reshape(-1,1), self.v.reshape(-1,1))
         #print("leaving add_data_point")
+        #print(self.x_max)
 
     def get_solution(self):
         """
@@ -308,14 +307,16 @@ class BO_algo():
         """
 
         # TODO: enter your code here
-        sorted_f_indices = np.argsort(self.f)
-        x_best_index = len(self.f)-1
+#         sorted_f_indices = np.argsort(self.f)
+#         x_best_index = len(self.f)-1
         
-        for index in range (len(sorted_f_indices)):
-            if self.v[sorted_f_indices[index]] > 1.2:
-                x_best_index = np.argmax(self.f)
+#         for index in range (len(sorted_f_indices)):
+#             if self.v[sorted_f_indices[index]] > 1.2:
+#                 x_best_index = np.argmax(self.f)
         
-        return self.x[x_best_index]
+#         return self.x[x_best_index]
+        
+        return self.x_max.item()
 
 
 """ Toy problem to check code works as expected """
