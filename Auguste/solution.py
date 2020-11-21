@@ -1,8 +1,9 @@
 import numpy as np
 from scipy.optimize import fmin_l_bfgs_b
-from sklearn.gaussian_process.kernels import ConstantKernel, Matern, WhiteKernel, Sum, Product
-from sklearn.gaussian_process import GaussianProcessRegressor
 from scipy.stats import norm
+from scipy.special import erf
+from sklearn.gaussian_process.kernels import Matern, ConstantKernel,  WhiteKernel, Sum, Product
+from sklearn.gaussian_process import GaussianProcessRegressor
 
 domain = np.array([[0, 5]])
 
@@ -15,10 +16,11 @@ class BO_algo():
 
         # TODO: enter your code here
         # speed threshold
-        self.kappa = 1.2 #0.21
+        epsilon = 0.01
+        self.kappa = 1.2 + epsilon  # 1.21 / 1.20
 
         # Validation Function F
-        self.f_noise = 0.15  # 0.5?
+        self.f_noise = 0.15  # 0.5 / 0.15 /0.4 changing this change the results, higher noises gave better results
         self.f_var = 0.5
         self.f_lenscale = 0.5
         self.f_nu = 2.5
@@ -50,14 +52,13 @@ class BO_algo():
                                              optimizer='fmin_l_bfgs_b', n_restarts_optimizer=0, normalize_y=False,
                                              copy_X_train=True, random_state=None)
 
-        # 3 values pers sub array x, f, v
+        # Create the array to store data (x, f and v) + a boolean to be used later
         self.delete_first_raw = False
         self.xfv = np.zeros([1, 3])
 
     def next_recommendation(self):
         """
         Recommend the next input to sample.
-
         Returns
         -------
         recommendation: np.ndarray
@@ -65,13 +66,14 @@ class BO_algo():
         """
 
         # TODO: enter your code here
+
         # In implementing this function, you may use optimize_acquisition_function() defined below.
-        return np.atleast_2d(self.optimize_acquisition_function())
+        next_reco = self.optimize_acquisition_function()
+        return np.atleast_2d(next_reco)
 
     def optimize_acquisition_function(self):
         """
         Optimizes the acquisition function.
-
         Returns
         -------
         x_opt: np.ndarray
@@ -83,6 +85,7 @@ class BO_algo():
 
         f_values = []
         x_values = []
+        x0_values = []
 
         # Restarts the optimization 20 times and pick best solution
         for _ in range(20):
@@ -92,19 +95,19 @@ class BO_algo():
                                    approx_grad=True)
             x_values.append(np.clip(result[0], *domain[0]))
             f_values.append(-result[1])
+            x0_values.append(x0)
 
         ind = np.argmax(f_values)
+
         return np.atleast_2d(x_values[ind])
 
     def acquisition_function(self, x):
         """
         Compute the acquisition function.
-
         Parameters
         ----------
         x: np.ndarray
             x in domain of f
-
         Returns
         ------
         af_value: float
@@ -112,28 +115,37 @@ class BO_algo():
         """
 
         # TODO: enter your code here
-        # LCB acquisition (https://github.com/scikit-optimize/scikit-optimize/blob/master/skopt/acquisition.py)
+
+        #Based on https://github.com/jmetzen/bayesian_optimization/blob/master/bayesian_optimization/acquisition_functions.py
+
         f_preds = self.gp_f.predict(np.atleast_2d(x), return_std=True)
-        v_preds = self.gp_v.predict(np.atleast_2d(x))
+        v_preds = self.gp_v.predict(np.atleast_2d(x), return_std=True)
 
-        # Exploration - Exploitation trade - off
-        acq_kappa = 0.9  # test other values
-        acq_result = f_preds[0] - acq_kappa * f_preds[1]
+        # Compute the ProbabilityOfImprovement of function V
+        trade_off = 0.05 # 0.9 or 1.96 or 0.05 or 0.01
+        gamma_v = (v_preds[0] - (self.kappa + trade_off)) / v_preds[1]
+        pi_v = norm.cdf(gamma_v)
 
-        if (v_preds < self.kappa):
-            # multiply acq_result by the weight ?
-            # weight = norm(v_mu, v_std).cdf(self.kappa)
-            # acq_result = acq_result * weight
-
-            # brut penality
-            acq_result = -10  # or another value (penality)
-
-        return np.reshape(acq_result, [1])
+        if (pi_v < 0.5):
+            #reshape to fit the correct shape
+            return np.reshape(pi_v, [1])
+        else:
+            # if ProbabilityOfImprovement of V is higher than 1/2, compute the ExpectedImprovement of function F and combine results
+            optimal_x_idx = np.argmax(self.xfv[:, 1])
+            best_f = self.xfv[optimal_x_idx, 1]
+            gamma_f = (f_preds[0] - (best_f + trade_off)) / f_preds[1]
+            # Compute EI based on some temporary variables that can be reused in
+            # gradient computation
+            tmp_erf = erf(gamma_f / np.sqrt(2))
+            tmp_ei_no_std = 0.5 * gamma_f * (1 + tmp_erf) \
+                            + np.exp(-gamma_f ** 2 / 2) / np.sqrt(2 * np.pi)
+            ei_f = f_preds[1] * tmp_ei_no_std
+            #reshape to fit the correct shape
+            return np.reshape(pi_v*ei_f, [1])
 
     def add_data_point(self, x, f, v):
         """
         Add data points to the model.
-
         Parameters
         ----------
         x: np.ndarray
@@ -149,19 +161,14 @@ class BO_algo():
         # vstack instead of concatenate ?
         xfv_new = np.append(np.append(x, np.atleast_2d(f), axis=1), np.atleast_2d(v), axis=1)
         self.xfv = np.concatenate((self.xfv, xfv_new), axis=0)
-        # self.xfv = np.vstack((self.xfv, xfv_new))
 
-        # remove first subarray of zeros used for initialization (only at first call)
+        # remove first subarray of zeros used during initialization (only at first call)
         # je sais c'est bizzare mais je voulais etre sur
         if (self.delete_first_raw == False):
             self.delete_first_raw = True
             self.xfv = np.delete(self.xfv, 0, axis=0)
 
-        # separate data for the training
-        # x_train = np.atleast_2d(self.xfv[:, 0]).T
-        # f_train = np.atleast_2d(self.xfv[:, 1]).T
-        # v_train = np.atleast_2d(self.xfv[:, 2]).T
-
+        #get each set separately and shape them such we can us it in the 'fit' function of a GaussianProcessRegressor
         x_train = np.transpose(np.atleast_2d(self.xfv[:, 0]))
         f_train = np.transpose(np.atleast_2d(self.xfv[:, 1]))
         v_train = np.transpose(np.atleast_2d(self.xfv[:, 2]))
@@ -173,7 +180,6 @@ class BO_algo():
     def get_solution(self):
         """
         Return x_opt that is believed to be the maximizer of f.
-
         Returns
         -------
         solution: np.ndarray
@@ -181,7 +187,8 @@ class BO_algo():
         """
 
         # TODO: enter your code here
-        # take only solution with a minimum speed
+
+        # take only solution with a speed higher than the vmin kappa
         speed_mask = (self.xfv[:, 2] >= self.kappa)
 
         # set of possible solutions
@@ -200,7 +207,6 @@ class BO_algo():
 
 
 """ Toy problem to check code works as expected """
-
 
 def check_in_domain(x):
     """Validate input"""
