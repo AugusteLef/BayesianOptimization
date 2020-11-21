@@ -20,7 +20,7 @@ class BO_algo():
         self.kappa = 1.2 + epsilon  # 1.21 / 1.20
 
         # Validation Function F
-        self.f_noise = 0.15  # 0.5 / 0.15 /0.4 changing this change the results, higher noises gave better results
+        self.f_noise = 0.5  # 0.5 / 0.15 /0.4 changing this change the results, higher noises gave better results
         self.f_var = 0.5
         self.f_lenscale = 0.5
         self.f_nu = 2.5

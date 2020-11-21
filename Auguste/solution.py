@@ -122,7 +122,7 @@ class BO_algo():
         v_preds = self.gp_v.predict(np.atleast_2d(x), return_std=True)
 
         # Compute the ProbabilityOfImprovement of function V
-        trade_off = 0.05 # 0.9 or 1.96 or 0.05 or 0.01
+        trade_off = 0.01 # 0.9 or 1.96 or 0.05 or 0.01
         gamma_v = (v_preds[0] - (self.kappa + trade_off)) / v_preds[1]
         pi_v = norm.cdf(gamma_v)
 
