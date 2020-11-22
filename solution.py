@@ -44,7 +44,7 @@ class BO_algo():
         self.v_mean = 1.5
         self.v_nu = 2.5
 
-        kv_1 = Matern(length_scale=self.v_lenscale, length_scale_bounds=[1e-5, 1e5], nu=self.v_nu)
+        kv_1 = Matern(length_scale=self.v_lenscale, length_scale_bounds="fixed", nu=self.v_nu)
         kv_2 = ConstantKernel(constant_value=self.v_var)
         kv_3 = WhiteKernel(noise_level=self.v_noise)
         kv_4 = ConstantKernel(constant_value=self.v_mean)
