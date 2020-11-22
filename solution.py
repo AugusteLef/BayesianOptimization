@@ -15,9 +15,12 @@ class BO_algo():
         """Initializes the algorithm with a parameter configuration. """
 
         # TODO: enter your code here
+        #mode
+        self.mode = "UCB"
+        #self.mode = "EI/PI"
         # speed threshold
-        epsilon = 0.01
-        self.kappa = 1.2 + epsilon  # 1.21 / 1.20
+        self.epsilon = 0.01
+        self.kappa = 1.2 + self.epsilon  # 1.21 / 1.20
 
         # Validation Function F
         self.f_noise = 0.15  # 0.5 / 0.15 /0.4 changing this change the results, higher noises gave better results
@@ -121,27 +124,35 @@ class BO_algo():
         f_preds = self.gp_f.predict(np.atleast_2d(x), return_std=True)
         v_preds = self.gp_v.predict(np.atleast_2d(x), return_std=True)
 
-        # Compute the ProbabilityOfImprovement of function V
-        trade_off = 0.01 # 0.9 or 1.96 or 0.05 or 0.01
-        gamma_v = (v_preds[0] - (self.kappa + trade_off)) / v_preds[1]
-        pi_v = norm.cdf(gamma_v)
-
-        if (pi_v < 0.5):
-            #reshape to fit the correct shape
-            return np.reshape(pi_v, [1])
-        else:
-            # if ProbabilityOfImprovement of V is higher than 1/2, compute the ExpectedImprovement of function F and combine results
+        if self.mode == "UCB":
+            beta = 1.5
             optimal_x_idx = np.argmax(self.xfv[:, 1])
             best_f = self.xfv[optimal_x_idx, 1]
-            gamma_f = (f_preds[0] - (best_f + trade_off)) / f_preds[1]
-            # Compute EI based on some temporary variables that can be reused in
-            # gradient computation
-            tmp_erf = erf(gamma_f / np.sqrt(2))
-            tmp_ei_no_std = 0.5 * gamma_f * (1 + tmp_erf) \
-                            + np.exp(-gamma_f ** 2 / 2) / np.sqrt(2 * np.pi)
-            ei_f = f_preds[1] * tmp_ei_no_std
-            #reshape to fit the correct shape
-            return np.reshape(pi_v*ei_f, [1])
+            ucb = (f_preds[0] - best_f) + f_preds[0]*beta
+            return ucb
+
+        if self.mode == "EI/PI":
+            # Compute the ProbabilityOfImprovement of function V
+            trade_off = 0.01 # 0.9 or 1.96 or 0.05 or 0.01
+            gamma_v = (v_preds[0] - (self.kappa + trade_off)) / v_preds[1]
+            pi_v = norm.cdf(gamma_v)
+
+            if (pi_v < 0.5):
+                #reshape to fit the correct shape
+                return np.reshape(pi_v, [1])
+            else:
+                # if ProbabilityOfImprovement of V is higher than 1/2, compute the ExpectedImprovement of function F and combine results
+                optimal_x_idx = np.argmax(self.xfv[:, 1])
+                best_f = self.xfv[optimal_x_idx, 1]
+                gamma_f = (f_preds[0] - (best_f + trade_off)) / f_preds[1]
+                # Compute EI based on some temporary variables that can be reused in
+                # gradient computation
+                tmp_erf = erf(gamma_f / np.sqrt(2))
+                tmp_ei_no_std = 0.5 * gamma_f * (1 + tmp_erf) \
+                                + np.exp(-gamma_f ** 2 / 2) / np.sqrt(2 * np.pi)
+                ei_f = f_preds[1] * tmp_ei_no_std
+                #reshape to fit the correct shape
+                return np.reshape(pi_v*ei_f, [1])
 
     def add_data_point(self, x, f, v):
         """
@@ -199,8 +210,22 @@ class BO_algo():
         try:
             optimal_x_idx = np.argmax(solutions[:, 1])
         except:
-            optimal_x_idx = np.argmax(self.xfv[:, 1])
-            solutions = self.xfv
+            try:
+                # take only solution with a speed higher than the vmin kappa
+                speed_mask = (self.xfv[:, 2] >= self.kappa + self.epsilon)
+                # set of possible solutions
+                solutions = self.xfv[speed_mask]
+                optimal_x_idx = np.argmax(solutions[:, 1])
+            except:
+                try:
+                    # take only solution with a speed higher than the vmin kappa
+                    speed_mask = (self.xfv[:, 2] >= self.kappa + self.epsilon*2)
+                    # set of possible solutions
+                    solutions = self.xfv[speed_mask]
+                    optimal_x_idx = np.argmax(solutions[:, 1])
+                except:
+                    optimal_x_idx = np.argmax(self.xfv[:, 1])
+                    solutions = self.xfv
 
         # return optimal solution (x)
         return solutions[optimal_x_idx, 0]
